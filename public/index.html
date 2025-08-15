@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>Receipt Entry</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <style>
+    body { font-family: system-ui, Arial, sans-serif; margin: 24px; }
+    h2, h3 { margin: 0 0 12px; }
+    .row { display: flex; gap: 20px; flex-wrap: wrap; }
+    .box { flex: 1 1 420px; border: 1px solid #d0d0d0; border-radius: 10px; padding: 16px; }
+    label { display:block; font-size: 0.9rem; margin: 8px 0 4px; }
+    input, select { width:100%; padding:8px; border:1px solid #ccc; border-radius:8px; }
+    input[readonly] { background:#f7f7f7; }
+    table { width:100%; border-collapse: collapse; margin-top: 12px; }
+    th, td { border:1px solid #ddd; padding:8px; }
+    th { background:#fafafa; text-align:left; }
+    .controls { display:flex; gap:6px; }
+    .buttons { text-align:center; margin-top:20px; display:flex; gap:12px; justify-content:center; }
+    button { padding:10px 18px; border:none; border-radius:10px; cursor:pointer; }
+    .secondary { background:#f2f2f2; }
+    .primary { background:#111; color:white; }
+    .muted { color:#777; font-size:0.85rem; }
+  </style>
+</head>
+<body>
+
+<h2>Receipt Entry</h2>
+
+<div class="row">
+  <div class="box">
+    <h3>Order Request</h3>
+    <label for="vendorName">Vendor Name</label>
+    <input id="vendorName" type="text" required />
+
+    <label for="orderNumber">Order Number <span class="muted">(alphanumeric + special chars)</span></label>
+    <input id="orderNumber" type="text" pattern="^[A-Za-z0-9 \-_\.\#\@\!\$\%\&\*\+\=\/\:\;,\?\(\)]{1,100}$" required />
+
+    <label for="dateOrder">Date Order</label>
+    <input id="dateOrder" type="date" required />
+  </div>
+
+  <div class="box">
+    <h3>Order Costs</h3>
+    <label for="subTotal">Subtotal</label>
+    <input id="subTotal" type="number" inputmode="decimal" step="0.01" readonly />
+
+    <label for="shipping">Shipping (USD)</label>
+    <input id="shipping" type="number" inputmode="decimal" step="0.01" value="0.00" />
+
+    <label for="salesTax">Sales Tax (USD)</label>
+    <input id="salesTax" type="number" inputmode="decimal" step="0.01" value="0.00" />
+
+    <label for="discount">Discount (USD)</label>
+    <input id="discount" type="number" inputmode="decimal" step="0.01" value="0.00" />
+
+    <label for="totalCost">Total Cost</label>
+    <input id="totalCost" type="number" inputmode="decimal" step="0.01" readonly />
+  </div>
+</div>
+
+<h3 style="margin-top:20px;">Item List</h3>
+<table id="itemTable" aria-label="Item List">
+  <thead>
+    <tr>
+      <th>Item Description</th>
+      <th>Price (USD)</th>
+      <th>Quantity</th>
+      <th>Subtotal</th>
+      <th>Category</th>
+      <th>+ / –</th>
+    </tr>
+  </thead>
+  <tbody id="itemBody"></tbody>
+</table>
+
+<div class="buttons">
+  <button id="clearBtn" type="button" class="secondary">Clear</button>
+  <button id="submitBtn" type="button" class="primary">Submit</button>
+</div>
+
+<script>
+  const CATEGORIES = [
+    "3D","Air Freshners","Apparel","Ashtrays","Blind Boxes","Books/Notebooks","Boxes","Candles","Candy","Clock","Coffee",
+    "Cookies","Crochet","Cups","Dice","Earrings","Figures","Floor Mats","Framed Art","Fudge","H","Incense","Jewelry",
+    "Jewelry Holder","Keychains","Labubu","Lamp","Lighters","Novelty","Nursery Frames","Ornaments","Pet","Pins",
+    "Purses/Bags","Rings","Shoes","Skulls","Squishmellow","Stickers","Stones/Crystals","Suncatchers","Umbrella",
+    "Vendor","Warmers","Watches","Zuru","Legal/Professional Fees","Home Office","Rent","Startup Costs","Auto Expenses",
+    "Business Insurance","Charitable Contributions","Bank Fees","Insurance","Marketing","Meals/Entertainment",
+    "Employee Compensation","Bad Debt","Education Expenses","Interests","Internet","Labor Expenses","Office Supplies",
+    "Travel","Travel Expenses","Utilities","Business Meals","Cost of Goods Sold"
+  ];
+
+  const itemBody = document.getElementById('itemBody');
+  const subTotalInput = document.getElementById('subTotal');
+  const totalCostInput = document.getElementById('totalCost');
+  const shippingInput = document.getElementById('shipping');
+  const salesTaxInput = document.getElementById('salesTax');
+  const discountInput = document.getElementById('discount');
+
+  function addRow(data = {}) {
+    const tr = document.createElement('tr');
+
+    const tdDesc = document.createElement('td');
+    const tdPrice = document.createElement('td');
+    const tdQty = document.createElement('td');
+    const tdSub = document.createElement('td');
+    const tdCat = document.createElement('td');
+    const tdBtns = document.createElement('td');
+
+    const inDesc = document.createElement('input');
+    inDesc.type = 'text';
+    inDesc.value = data.ItemDescription || '';
+    inDesc.required = true;
+
+    const inPrice = document.createElement('input');
+    inPrice.type = 'number'; inPrice.step = '0.01'; inPrice.inputMode = 'decimal';
+    inPrice.value = (data.Price ?? '').toString();
+
+    const inQty = document.createElement('input');
+    inQty.type = 'number'; inQty.step = '1'; inQty.min = '0'; inQty.inputMode = 'numeric';
+    inQty.value = (data.Quantity ?? '').toString();
+
+    const inSub = document.createElement('input');
+    inSub.type = 'number'; inSub.step = '0.01'; inSub.readOnly = true;
+
+    const sel = document.createElement('select');
+    const blank = document.createElement('option'); blank.value = ''; blank.textContent = '--Select--';
+    sel.appendChild(blank);
+    CATEGORIES.forEach(c => {
+      const o = document.createElement('option'); o.value = c; o.textContent = c;
+      if (data.Category === c) o.selected = true;
+      sel.appendChild(o);
+    });
+
+    const addBtn = document.createElement('button'); addBtn.type = 'button'; addBtn.textContent = '+';
+    const delBtn = document.createElement('button'); delBtn.type = 'button'; delBtn.textContent = '–';
+    addBtn.addEventListener('click', () => addRow());
+    delBtn.addEventListener('click', () => { tr.remove(); recalcAll(); });
+
+    function recalcRow() {
+      const price = parseFloat(inPrice.value) || 0;
+      const qty = parseInt(inQty.value) || 0;
+      const sub = (price * qty);
+      inSub.value = sub.toFixed(2);
+      recalcAll();
+    }
+    [inPrice, inQty].forEach(el => el.addEventListener('input', recalcRow));
+
+    tdDesc.appendChild(inDesc);
+    tdPrice.appendChild(inPrice);
+    tdQty.appendChild(inQty);
+    tdSub.appendChild(inSub);
+    tdCat.appendChild(sel);
+    const ctl = document.createElement('div'); ctl.className = 'controls';
+    ctl.appendChild(addBtn); ctl.appendChild(delBtn);
+    tdBtns.appendChild(ctl);
+
+    tr.append(tdDesc, tdPrice, tdQty, tdSub, tdCat, tdBtns);
+    itemBody.appendChild(tr);
+    recalcRow();
+  }
+
+  function recalcAll() {
+    let subtotal = 0;
+    itemBody.querySelectorAll('tr').forEach(r => {
+      const sub = parseFloat(r.querySelector('td:nth-child(4) input').value) || 0;
+      subtotal += sub;
+    });
+    subTotalInput.value = subtotal.toFixed(2);
+    const shipping = parseFloat(shippingInput.value) || 0;
+    const salesTax = parseFloat(salesTaxInput.value) || 0;
+    const discount = parseFloat(discountInput.value) || 0;
+    totalCostInput.value = (subtotal + salesTax + shipping - discount).toFixed(2);
+  }
+
+  [shippingInput, salesTaxInput, discountInput].forEach(el => el.addEventListener('input', recalcAll));
+  addRow();
+
+  document.getElementById('clearBtn').addEventListener('click', () => {
+    document.getElementById('vendorName').value = '';
+    document.getElementById('orderNumber').value = '';
+    document.getElementById('dateOrder').value = '';
+    shippingInput.value = '0.00'; salesTaxInput.value = '0.00'; discountInput.value = '0.00';
+    itemBody.innerHTML = '';
+    addRow();
+    recalcAll();
+  });
+
+  document.getElementById('submitBtn').addEventListener('click', async () => {
+    const vendorName = document.getElementById('vendorName').value.trim();
+    const orderNumber = document.getElementById('orderNumber').value.trim();
+    const dateOrder = document.getElementById('dateOrder').value;
+
+    if (!vendorName || !orderNumber || !dateOrder) {
+      alert('Please complete Vendor Name, Order Number, and Date Order.');
+      return;
+    }
+
+    const items = [];
+    itemBody.querySelectorAll('tr').forEach(r => {
+      const desc = r.querySelector('td:nth-child(1) input').value.trim();
+      const price = parseFloat(r.querySelector('td:nth-child(2) input').value) || 0;
+      const qty = parseInt(r.querySelector('td:nth-child(3) input').value) || 0;
+      const cat = r.querySelector('td:nth-child(5) select').value;
+      if (desc && qty > 0) {
+        items.push({ ItemDescription: desc, Price: price, Quantity: qty, Category: cat || '' });
+      }
+    });
+
+    if (items.length === 0) {
+      alert('Please add at least one item with quantity > 0.');
+      return;
+    }
+
+    const payload = {
+      VendorName: vendorName,
+      DateOrder: dateOrder,
+      OrderNumber: orderNumber,
+      Shipping: parseFloat(shippingInput.value) || 0,
+      SalesTax: parseFloat(salesTaxInput.value) || 0,
+      Discount: parseFloat(discountInput.value) || 0,
+      Items: items
+    };
+
+    try {
+      const res = await fetch('/api/receipts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      alert(`Saved! PaymentID = ${data.PaymentID}`);
+      document.getElementById('clearBtn').click();
+    } catch (err) {
+      console.error(err);
+      alert('Save failed: ' + err.message);
+    }
+  });
+</script>
+</body>
+</html>
